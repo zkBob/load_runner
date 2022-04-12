@@ -1,0 +1,16 @@
+[package]
+name = "load_runner"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+secp256k1 = "0.21"
+web3="0.18.0"
+tokio={version="1.0", features=["rt"]}
+libzeropool = { version = "0.5.3", default-features = false, features = ["in3out127"] }
+borsh = "0.9.1"
+libzeropool-rs = "0.3.8"
+rand = "0.8.4"
+serde_json = "1.0.64"
