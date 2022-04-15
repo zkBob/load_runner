@@ -1,3 +1,4 @@
+## Running the runner
 1. Clone relayer, launch setup script to copy circuit params to a local folder
 2. Set environment variables ( or pass in the run command):
 
@@ -23,3 +24,13 @@ and run
 ```
 RUST_LOG="info" cargo run --release | bunyan
 ```
+
+
+## Running the visualiztion suite
+
+```
+cd docker
+docker-compose up -d
+```
+
+navigate to http://localhost:9090

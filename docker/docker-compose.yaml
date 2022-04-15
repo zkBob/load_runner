@@ -1,0 +1,17 @@
+version: '3.8'
+
+services:
+  prometheus:
+    container_name: prometheus
+    image: prom/prometheus
+    ports:
+      - 9090:9090
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+    depends_on:
+      - push_gateway
+  push_gateway:
+    container_name: push_gateway
+    image: prom/pushgateway
+    ports:
+      - 9091:9091
