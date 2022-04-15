@@ -72,10 +72,16 @@ async fn main() -> Result<(), TestError> {
 async fn send_tx(deposit: Deposit) -> Result<(), reqwest::Error> {
     let client = reqwest::Client::new();
 
+    let body = serde_json::to_string(&deposit).unwrap();
+
+    println!("{}", body);
+
+    // let body = "{\"foo\":\"bar\"}";
     let result = client
         .post("http://localhost:8000/transaction")
-        .body(serde_json::to_string(&deposit).unwrap())
-        .timeout(Duration::from_secs(30))
+        .body(body)
+        .header("Content-type", "application/json")
+        .timeout(Duration::from_secs(3))
         .send()
         .await?;
     
