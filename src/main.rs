@@ -1,7 +1,7 @@
 use load_runner::telemetry::*;
 use libzeropool::{
     fawkes_crypto::{
-        backend::bellman_groth16::{engines::Bn256, prover::Proof},
+        backend::bellman_groth16::{engines::Bn256, prover},
         engines::bn256::Fr,
         ff_uint::Num,
     },
@@ -26,12 +26,16 @@ enum TestError {
 }
 
 #[derive(Serialize, Deserialize)]
+struct Proof {
+    inputs: Vec<Num<Fr>>,
+    proof: prover::Proof<Bn256>,
+}
+
+#[derive(Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct Deposit {
-    inputs: Vec<Num<Fr>>,
-    proof: Proof<Bn256>,
+    proof: Proof,
     memo: Vec<u8>,
-    #[serde(rename(serialize = "txType"))]
     tx_type: String,
     deposit_signature: SignedData,
 }
@@ -167,8 +171,10 @@ async fn generate_deposit() -> Deposit {
     let signed = Accounts::sign(&accounts, buf, key_ref);
 
     let deposit = Deposit {
-        inputs,
-        proof,
+        proof: Proof {
+            inputs,
+            proof
+        },
         memo: tx_data.memo,
         tx_type: String::from("0000"),
         deposit_signature: signed,
