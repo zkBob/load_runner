@@ -11,7 +11,10 @@ use load_runner::telemetry::*;
 use reqwest::StatusCode;
 use secp256k1::SecretKey;
 use serde::{Deserialize, Serialize};
-use std::{env, time::Duration};
+use std::{
+    env,
+    time::{Duration, SystemTime},
+};
 use std::{fs, str::FromStr};
 use web3::{api::Accounts, types::SignedData};
 
@@ -32,7 +35,7 @@ struct Proof {
 #[serde(rename_all = "camelCase")]
 struct Deposit {
     proof: Proof,
-    memo: Vec<u8>,
+    memo: String,
     tx_type: String,
     deposit_signature: String,
 }
@@ -100,13 +103,10 @@ async fn send_tx(deposit: Deposit) -> Result<(), reqwest::Error> {
 }
 
 fn pack_signature(signature: SignedData) -> Result<String, TestError> {
-    let r = serde_json::to_string(&signature.r).map_err(|e| TestError::SerializationError(e))?;
+    let mut packed = hex::encode(signature.r.as_bytes());
+    let s = hex::encode(signature.s.as_bytes());
 
-    let s = serde_json::to_string(&signature.s).map_err(|e| TestError::SerializationError(e))?;
-
-    let mut packed = String::from(&r[1..67]);
-
-    packed.push_str(&s[3..67]);
+    packed.push_str(&s);
 
     if signature.v % 2 != 0 {
         packed.push_str("1");
@@ -132,7 +132,8 @@ fn sign_nullifier(nullifier: Num<Fr>) -> Result<String, TestError> {
 
     // Insert the 32-byte private key in hex format (do NOT prefix with 0x)
     let prvk: secp256k1::SecretKey =
-        SecretKey::from_str("01010101010101010001020304050607ffff0000ffff00006363636363636363")
+        // SecretKey::from_str("01010101010101010001020304050607ffff0000ffff00006363636363636363")
+        SecretKey::from_str("6cbed15c793ce57650b9877cf6fa156fbef513c4e6134f022a85b1ffdd59b2a1")
             .unwrap();
 
     let key_ref = web3::signing::SecretKeyRef::new(&prvk);
@@ -194,7 +195,7 @@ async fn generate_deposit() -> Result<Deposit, TestError> {
 
     let deposit = Deposit {
         proof: Proof { inputs, proof },
-        memo: tx_data.memo,
+        memo: hex::encode(tx_data.memo),
         tx_type: String::from("0000"),
         deposit_signature,
     };
