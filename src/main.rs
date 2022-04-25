@@ -239,6 +239,7 @@ fn nullifier_sign_test(){
 #[test]
 fn verifiy_sig() {
     const CLIENT_PUB_KEY: &str = "ffcf8fdee72ac11b5c542428b35eef5769c409f0";
+    
     let mut msg: [u8; 32] = [0; 32];
     let msg_vec =
         hex::decode("22873c1e5b345e0f0b9968cad056e5175603767e12d79b6f58ac15470177e7d4").unwrap();
@@ -270,11 +271,12 @@ fn verifiy_sig() {
 
     assert_eq!(packed_sig,"0xf70f2aa887c1f146e14a2fe5581805c6f93f99396e4f738740cf45a7af21d54c62ff74ee8b0712c0fe9bd0f94e71b9e2ccde83e7f1dff6c6f91c12a556eb014d");
 
-    let mut _address: [u8; 20] = [0; 20];
+    let mut client_address: [u8; 20] = [0; 20];
 
-    _address.copy_from_slice(&hex::decode(CLIENT_PUB_KEY).unwrap());
-    match result {
-        Ok(address) => assert_eq!(address, H160::from(_address)),
-        Err(inner) => assert!(false, "WTF {:#?}", inner),
-    }
+    client_address.copy_from_slice(&hex::decode(CLIENT_PUB_KEY).unwrap());
+
+    assert!(result.is_ok());
+
+    assert_eq!(result.unwrap(),H160::from(client_address) );
+
 }

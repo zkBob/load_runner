@@ -51,73 +51,84 @@ const relayerPrivateKey = '0x646f1ce2fdad0e6deeeb5c7e8e5543bdde65e86029e2fd9fc16
 const minterAddress = '0x90F8bf6A479f320ead074411a4B0e7944Ea8c9C1'
 const minterPrivateKey = '0x4f3edf983ac636a65a842ce7c78d9aa706d3b113bce9c46f30d7d21715b23b1d';
 
+
+const poolContractAddress = '0xc89ce4735882c9f0f0fe26686c53074e09b0d550';
+
 web3.eth.accounts.wallet.add(minterPrivateKey);
 web3.eth.accounts.wallet.add(clientPrivateKey);
 web3.eth.accounts.wallet.add(relayerPrivateKey);
-const mint = async() => {
+const mint = async () => {
 
-const mintingResult = await  token
-    .methods
-    .mint(clientAddress, denominator.mul(utils.toBN(10000000)).toString())
-    .send({ from: minterAddress, gasLimit: 100000 })
-    .then(result => {
-        console.log("mint result", result.events.Transfer);
-        // console.log("events:")
-    }).catch(err => console.error("mint failed", err))
+    const txHash =  await token
+        .methods
+        .mint(clientAddress, denominator.mul(utils.toBN(100000000000)).toString())
+        .send({ from: minterAddress, gasLimit: 100000 })
 
-
+        return txHash.events.Transfer.raw
 }
-// console.log("methods", token.methods);
 
+const getTokenBalance = async () => {
+
+
+    const balance = await token.methods.balanceOf(clientAddress).call();
+
+    console.log('balance:', balance)
+}
+
+const approve = async () => {
+    const approveResult = await token.methods.approve(poolContractAddress, utils.toBN(100000000000)).send({ from: clientAddress, gasLimit: 100000 });
+
+    console.log('approveResult',approveResult)
+}
+
+const checkAllowance = async () => {
+    const allowance = await token.methods.allowance(clientAddress, poolContractAddress)
+    .call();
+
+    console.log("allowance:",allowance)
+}
 const transfer = async () => {
-    const allowance = token.methods.allowance(clientAddress, relayerAddress)
-        .call();
-
-    log("allowance", allowance)
-    const transferResult = await token
+    await token
         .methods
         .approve(relayerAddress, denominator.mul(utils.toBN(10000000)).toString())
         .send({ from: clientAddress, gasLimit: 100000 });
-
-    log(transferResult)
-
-
 }
 
 const transferFrom = async () => {
     token
-    .methods
-    .transferFrom(relayerAddress,clientAddress, denominator.mul(utils.toBN(1)).toString())
-    .send({ from: clientAddress, gasLimit:100000 })
-    .then(result => {
-        console.log("approve result", result);
-    }).catch(err => console.error("approve failed", err))
-
-    // approve(address spender, uint256 amount) public virtual override returns (bool) {
-    //     address owner = _msgSender();
-    //     _approve(owner, spender, amount);
-    //     return true;
-    // }
+        .methods
+        .transferFrom(relayerAddress, clientAddress, denominator.mul(utils.toBN(1)).toString())
+        .send({ from: clientAddress, gasLimit: 100000 })
+        .then(result => {
+            console.log("approve result", result);
+        }).catch(err => console.error("approve failed", err))
 }
 
-function numToHex(web3 , n, pad = 64) {
+function numToHex(web3, n, pad = 64) {
     let num = toBN(n)
     if (num.isNeg()) {
-      let a = toBN(2).pow(toBN(pad * 4))
-      num = a.sub(num.neg())
+        let a = toBN(2).pow(toBN(pad * 4))
+        num = a.sub(num.neg())
     }
     const hex = web3.utils.numberToHex(num)
     return web3.utils.padLeft(hex, pad)
-  }
-var msg = '0'
-console.log("client pub key:", clientAddress)
-console.log("message: ", numToHex(web3, 0));
+}
 
-const depositSignature = web3.eth.accounts.sign(
-    "0x17e28744832f55892f50bec11479d42d743e45e6533ffdfcd28608b29ae0a036",
-    clientPrivateKey
-  )
 
-  console.log("deposit Signature", depositSignature)
+async function main() {
 
-//   web3.eth.accounts.recover(message, v, r, s [, preFixed]);
+    try {
+        console.log(await mint());
+        await getTokenBalance();
+        await checkAllowance();
+        await approve();
+        await checkAllowance();
+    } catch (error) {
+        console.error(error)
+    }
+
+}
+
+main().then(() => console.log("completed"))
+.catch(err => { console.error("WTF", err);})
+
