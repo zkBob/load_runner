@@ -1,4 +1,3 @@
-use borsh::BorshDeserialize;
 use libzeropool::{
     fawkes_crypto::{
         backend::bellman_groth16::{engines::Bn256, prover},
@@ -12,24 +11,15 @@ use load_runner::telemetry::*;
 use reqwest::StatusCode;
 use secp256k1::SecretKey;
 use serde::{Deserialize, Serialize};
-use std::{
-    env,
-    time::{Duration, SystemTime},
-};
+use std::{env, time::Duration};
 use std::{fs, str::FromStr};
-use web3::{
-    api::Accounts,
-    signing::RecoveryError,
-    types::{Recovery, RecoveryMessage, SignedData, H160},
-};
+use web3::{api::Accounts, types::SignedData};
 
 const CLIENT_PK: &str = "6cbed15c793ce57650b9877cf6fa156fbef513c4e6134f022a85b1ffdd59b2a1";
 
 #[derive(Debug)]
 enum TestError {
     NetworkError(reqwest::Error),
-    Web3Error(web3::ethabi::Error),
-    SerializationError(serde_json::Error),
 }
 
 #[derive(Serialize, Deserialize)]
@@ -55,22 +45,24 @@ async fn main() -> Result<(), TestError> {
         std::io::stdout,
     ));
 
-    let deposit: Deposit = match env::var("DEPOSIT_TX") {
-        Ok(path) => {
-            tracing::info!("found path to deposit tx:{}", path);
-            match fs::read(path) {
-                Ok(serialized_deposit) => serde_json::from_slice(&serialized_deposit).unwrap(),
-                _ => {
-                    tracing::info!("reading failed, generating new tx");
-                    generate_deposit().await?
-                }
-            }
-        }
-        _ => {
-            tracing::info!("generating new tx");
-            generate_deposit().await?
-        }
-    };
+    let deposit = generate_deposit().await?;
+
+    // let deposit: Deposit = match env::var("DEPOSIT_TX") {
+    //     Ok(path) => {
+    //         tracing::info!("found path to deposit tx:{}", path);
+    //         match fs::read(path) {
+    //             Ok(serialized_deposit) => serde_json::from_slice(&serialized_deposit).unwrap(),
+    //             _ => {
+    //                 tracing::info!("reading failed, generating new tx");
+    //                 generate_deposit().await?
+    //             }
+    //         }
+    //     }
+    //     _ => {
+    //         tracing::info!("generating new tx");
+    //         generate_deposit().await?
+    //     }
+    // };
 
     tracing::info!("sending tx to relayer");
     send_tx(deposit)
@@ -140,17 +132,25 @@ fn sign(buf: [u8; 32]) -> SignedData {
     let signed = Accounts::sign(&accounts, buf, key_ref);
     signed
 }
-fn sign_nullifier(nullifier: Num<Fr>) -> Result<String, TestError> {
+// fn sign_nullifier(nullifier: Num<Fr>) -> Result<String, TestError> {
+
+//     let buf = serialize(nullifier)?;
+
+//     let signed = sign(buf);
+
+//     pack_signature(signed)
+// }
+
+fn serialize(num: Num<Fr>) -> Result<[u8; 32], TestError> {
     use borsh::BorshSerialize;
+
     let mut buf: [u8; 32] = [0; 32];
 
-    BorshSerialize::serialize(&nullifier, &mut &mut buf[0..32]).unwrap();
+    BorshSerialize::serialize(&num, &mut &mut buf[0..32]).unwrap();
 
     buf.reverse();
 
-    println!("nullifier: {:#?}", hex::encode(buf));
-    let signed = sign(buf);
-    pack_signature(signed)
+    Ok(buf)
 }
 
 async fn generate_deposit() -> Result<Deposit, TestError> {
@@ -200,46 +200,60 @@ async fn generate_deposit() -> Result<Deposit, TestError> {
 
     assert!(verification_result);
 
-    let deposit_signature = sign_nullifier(nullifier)?;
+    let nullifier_bytes = serialize(nullifier)?;
+
+    let deposit_signature = sign(nullifier_bytes);
+
+    let packed_sig = pack_signature(deposit_signature)?;
 
     let deposit = Deposit {
         proof: Proof { inputs, proof },
         memo: hex::encode(tx_data.memo),
         tx_type: String::from("0000"),
-        deposit_signature,
+        deposit_signature: packed_sig,
     };
 
-    if env::var("DEPOSIT_TX").is_ok() {
-        let tx_folder = env::var("DEPOSIT_TX").unwrap();
+    if env::var("TX_FOLDER").is_ok() {
+        let mut tx_folder = env::var("TX_FOLDER").unwrap();
+        if tx_folder.ends_with("/") {
+            tx_folder.pop();
+            // tx_folder = .unwrap().to_string();
+        }
         let serialized_deposit = serde_json::to_string(&deposit).unwrap();
-        fs::write(tx_folder, serialized_deposit).unwrap();
+        let path = format!("{}/{}.json", tx_folder, &hex::encode(nullifier_bytes));
+        println!("path to file : {}", path);
+        fs::write(
+            path,
+            serialized_deposit,
+        )
+        .unwrap();
     }
 
     Ok(deposit)
 }
 
-
 #[test]
-fn nullifier_sign_test(){
-    
-    let mut unhexed = hex::decode(
-        "22873c1e5b345e0f0b9968cad056e5175603767e12d79b6f58ac15470177e7d4",
-    )
-    .unwrap();
+fn nullifier_sign_test() {
+    let mut unhexed =
+        hex::decode("22873c1e5b345e0f0b9968cad056e5175603767e12d79b6f58ac15470177e7d4").unwrap();
 
     unhexed.reverse();
 
-    let nullifier: Num<Fr> = BorshDeserialize::deserialize(&mut &unhexed[..]).unwrap();
+    let nullifier: Num<Fr> = borsh::BorshDeserialize::deserialize(&mut &unhexed[..]).unwrap();
 
-    let signature =  sign_nullifier(nullifier).unwrap();
+    let nullifier_bytes = serialize(nullifier).unwrap();
 
-    assert_eq!(signature.as_str(), "0xf70f2aa887c1f146e14a2fe5581805c6f93f99396e4f738740cf45a7af21d54c62ff74ee8b0712c0fe9bd0f94e71b9e2ccde83e7f1dff6c6f91c12a556eb014d");
+    let deposit_signature = sign(nullifier_bytes);
+
+    let packed_sig = pack_signature(deposit_signature).unwrap();
+
+    assert_eq!(packed_sig.as_str(), "0xf70f2aa887c1f146e14a2fe5581805c6f93f99396e4f738740cf45a7af21d54c62ff74ee8b0712c0fe9bd0f94e71b9e2ccde83e7f1dff6c6f91c12a556eb014d");
 }
 
 #[test]
 fn verifiy_sig() {
     const CLIENT_PUB_KEY: &str = "ffcf8fdee72ac11b5c542428b35eef5769c409f0";
-    
+
     let mut msg: [u8; 32] = [0; 32];
     let msg_vec =
         hex::decode("22873c1e5b345e0f0b9968cad056e5175603767e12d79b6f58ac15470177e7d4").unwrap();
@@ -262,8 +276,8 @@ fn verifiy_sig() {
 
     let packed_sig = pack_signature(signed_data).unwrap();
     println!("packed : {:#?}", packed_sig);
-    let result = accounts.recover(Recovery {
-        message: RecoveryMessage::Data(msg.to_vec()),
+    let result = accounts.recover(web3::types::Recovery {
+        message: web3::types::RecoveryMessage::Data(msg.to_vec()),
         v,
         r,
         s,
@@ -277,6 +291,5 @@ fn verifiy_sig() {
 
     assert!(result.is_ok());
 
-    assert_eq!(result.unwrap(),H160::from(client_address) );
-
+    assert_eq!(result.unwrap(), web3::types::H160::from(client_address));
 }
