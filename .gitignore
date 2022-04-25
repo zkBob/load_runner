@@ -2,3 +2,4 @@
 Cargo.lock
 /txs/deposit.json
 /misc/node_modules
+.env

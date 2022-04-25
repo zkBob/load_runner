@@ -1,3 +1,4 @@
+use borsh::BorshDeserialize;
 use libzeropool::{
     fawkes_crypto::{
         backend::bellman_groth16::{engines::Bn256, prover},
@@ -16,7 +17,13 @@ use std::{
     time::{Duration, SystemTime},
 };
 use std::{fs, str::FromStr};
-use web3::{api::Accounts, types::SignedData};
+use web3::{
+    api::Accounts,
+    signing::RecoveryError,
+    types::{Recovery, RecoveryMessage, SignedData, H160},
+};
+
+const CLIENT_PK: &str = "6cbed15c793ce57650b9877cf6fa156fbef513c4e6134f022a85b1ffdd59b2a1";
 
 #[derive(Debug)]
 enum TestError {
@@ -103,12 +110,10 @@ async fn send_tx(deposit: Deposit) -> Result<(), reqwest::Error> {
 }
 
 fn pack_signature(signature: SignedData) -> Result<String, TestError> {
-    let mut packed = hex::encode(signature.r.as_bytes());
-    let s = hex::encode(signature.s.as_bytes());
-
-    packed.push_str(&s);
-
-    if signature.v % 2 != 0 {
+    let mut packed = String::from("0x");
+    packed.push_str(&hex::encode(signature.r.as_bytes()));
+    packed.push_str(&hex::encode(signature.s.as_bytes()));
+    if signature.v % 2 == 0 {
         packed.push_str("1");
     }
     tracing::trace!(
@@ -121,26 +126,30 @@ fn pack_signature(signature: SignedData) -> Result<String, TestError> {
 
     Ok(packed)
 }
+
+fn sign(buf: [u8; 32]) -> SignedData {
+    let transport = web3::transports::Http::new("http://localhost:8545").unwrap();
+    let web3 = web3::Web3::new(transport);
+
+    // Insert the 32-byte private key in hex format (do NOT prefix with 0x)
+    let prvk: secp256k1::SecretKey = SecretKey::from_str(CLIENT_PK).unwrap();
+
+    let key_ref = web3::signing::SecretKeyRef::new(&prvk);
+
+    let accounts = web3.accounts();
+    let signed = Accounts::sign(&accounts, buf, key_ref);
+    signed
+}
 fn sign_nullifier(nullifier: Num<Fr>) -> Result<String, TestError> {
     use borsh::BorshSerialize;
     let mut buf: [u8; 32] = [0; 32];
 
     BorshSerialize::serialize(&nullifier, &mut &mut buf[0..32]).unwrap();
 
-    let transport = web3::transports::Http::new("http://localhost:8545").unwrap();
-    let web3 = web3::Web3::new(transport);
+    buf.reverse();
 
-    // Insert the 32-byte private key in hex format (do NOT prefix with 0x)
-    let prvk: secp256k1::SecretKey =
-        // SecretKey::from_str("01010101010101010001020304050607ffff0000ffff00006363636363636363")
-        SecretKey::from_str("6cbed15c793ce57650b9877cf6fa156fbef513c4e6134f022a85b1ffdd59b2a1")
-            .unwrap();
-
-    let key_ref = web3::signing::SecretKeyRef::new(&prvk);
-
-    let accounts = web3.accounts();
-    let signed = Accounts::sign(&accounts, buf, key_ref);
-
+    println!("nullifier: {:#?}", hex::encode(buf));
+    let signed = sign(buf);
     pack_signature(signed)
 }
 
@@ -207,4 +216,65 @@ async fn generate_deposit() -> Result<Deposit, TestError> {
     }
 
     Ok(deposit)
+}
+
+
+#[test]
+fn nullifier_sign_test(){
+    
+    let mut unhexed = hex::decode(
+        "22873c1e5b345e0f0b9968cad056e5175603767e12d79b6f58ac15470177e7d4",
+    )
+    .unwrap();
+
+    unhexed.reverse();
+
+    let nullifier: Num<Fr> = BorshDeserialize::deserialize(&mut &unhexed[..]).unwrap();
+
+    let signature =  sign_nullifier(nullifier).unwrap();
+
+    assert_eq!(signature.as_str(), "0xf70f2aa887c1f146e14a2fe5581805c6f93f99396e4f738740cf45a7af21d54c62ff74ee8b0712c0fe9bd0f94e71b9e2ccde83e7f1dff6c6f91c12a556eb014d");
+}
+
+#[test]
+fn verifiy_sig() {
+    const CLIENT_PUB_KEY: &str = "ffcf8fdee72ac11b5c542428b35eef5769c409f0";
+    let mut msg: [u8; 32] = [0; 32];
+    let msg_vec =
+        hex::decode("22873c1e5b345e0f0b9968cad056e5175603767e12d79b6f58ac15470177e7d4").unwrap();
+
+    msg.copy_from_slice(&msg_vec[0..32]);
+
+    let signed_data = sign(msg);
+
+    let r = signed_data.r;
+
+    let s = signed_data.s;
+
+    let v: u64 = signed_data.v.into();
+
+    let transport = web3::transports::Http::new("http://localhost:8545").unwrap();
+    let web3 = web3::Web3::new(transport);
+    let accounts = web3.accounts();
+
+    println!("r:{:#?}\n,s:{:#?},\nv:{:#?}", r, s, v);
+
+    let packed_sig = pack_signature(signed_data).unwrap();
+    println!("packed : {:#?}", packed_sig);
+    let result = accounts.recover(Recovery {
+        message: RecoveryMessage::Data(msg.to_vec()),
+        v,
+        r,
+        s,
+    });
+
+    assert_eq!(packed_sig,"0xf70f2aa887c1f146e14a2fe5581805c6f93f99396e4f738740cf45a7af21d54c62ff74ee8b0712c0fe9bd0f94e71b9e2ccde83e7f1dff6c6f91c12a556eb014d");
+
+    let mut _address: [u8; 20] = [0; 20];
+
+    _address.copy_from_slice(&hex::decode(CLIENT_PUB_KEY).unwrap());
+    match result {
+        Ok(address) => assert_eq!(address, H160::from(_address)),
+        Err(inner) => assert!(false, "WTF {:#?}", inner),
+    }
 }
