@@ -59,12 +59,12 @@ web3.eth.accounts.wallet.add(clientPrivateKey);
 web3.eth.accounts.wallet.add(relayerPrivateKey);
 const mint = async () => {
 
-    const txHash =  await token
+    const txHash = await token
         .methods
         .mint(clientAddress, denominator.mul(utils.toBN(100000000000)).toString())
         .send({ from: minterAddress, gasLimit: 100000 })
 
-        return txHash.events.Transfer.raw
+    return txHash.events.Transfer.raw
 }
 
 const getTokenBalance = async () => {
@@ -78,14 +78,14 @@ const getTokenBalance = async () => {
 const approve = async () => {
     const approveResult = await token.methods.approve(poolContractAddress, utils.toBN(100000000000)).send({ from: clientAddress, gasLimit: 100000 });
 
-    console.log('approveResult',approveResult)
+    console.log('approveResult', approveResult)
 }
 
 const checkAllowance = async () => {
     const allowance = await token.methods.allowance(clientAddress, poolContractAddress)
-    .call();
+        .call();
 
-    console.log("allowance:",allowance)
+    console.log("allowance:", allowance)
 }
 const transfer = async () => {
     await token
@@ -115,6 +115,25 @@ function numToHex(web3, n, pad = 64) {
 }
 
 
+const sign = (data) => {
+    const sig = web3.eth.accounts.sign(
+        data,
+        clientPrivateKey
+    )
+    console.log(sig)
+
+    const packSignature = (sign) => {
+        const vBit = toBN(sign.v).isEven()
+        const r = toBN(sign.r)
+        const s = toBN(sign.s)
+        if (vBit) s.iadd(toBN(2).pow(toBN(255)))
+        return '0x' + r.toString('hex') + s.toString('hex')
+    }
+
+    let packedSig = packSignature(sig)
+    console.log("packed sig", packedSig)
+}
+
 async function main() {
 
     try {
@@ -130,5 +149,5 @@ async function main() {
 }
 
 main().then(() => console.log("completed"))
-.catch(err => { console.error("WTF", err);})
+    .catch(err => { console.error(err); })
 

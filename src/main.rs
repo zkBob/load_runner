@@ -8,12 +8,16 @@ use libzeropool::{
 };
 use libzeropool_rs::client::{state::State, TxType, UserAccount};
 use load_runner::telemetry::*;
+use rand::Rng;
 use reqwest::StatusCode;
 use secp256k1::SecretKey;
 use serde::{Deserialize, Serialize};
 use std::{env, time::Duration};
 use std::{fs, str::FromStr};
-use web3::{api::Accounts, types::SignedData};
+use web3::{
+    api::Accounts,
+    types::SignedData,
+};
 
 const CLIENT_PK: &str = "6cbed15c793ce57650b9877cf6fa156fbef513c4e6134f022a85b1ffdd59b2a1";
 
@@ -47,22 +51,25 @@ async fn main() -> Result<(), TestError> {
 
     let deposit = generate_deposit().await?;
 
-    // let deposit: Deposit = match env::var("DEPOSIT_TX") {
-    //     Ok(path) => {
-    //         tracing::info!("found path to deposit tx:{}", path);
-    //         match fs::read(path) {
-    //             Ok(serialized_deposit) => serde_json::from_slice(&serialized_deposit).unwrap(),
-    //             _ => {
-    //                 tracing::info!("reading failed, generating new tx");
-    //                 generate_deposit().await?
-    //             }
-    //         }
-    //     }
-    //     _ => {
-    //         tracing::info!("generating new tx");
-    //         generate_deposit().await?
-    //     }
-    // };
+    /* 
+    //sends prebaked transactions:
+    let deposit: Deposit = match env::var("DEPOSIT_TX") {
+        Ok(path) => {
+            tracing::info!("found path to deposit tx:{}", path);
+            match fs::read(path) {
+                Ok(serialized_deposit) => serde_json::from_slice(&serialized_deposit).unwrap(),
+                _ => {
+                    tracing::info!("reading failed, generating new tx");
+                    generate_deposit().await?
+                }
+            }
+        }
+        _ => {
+            tracing::info!("generating new tx");
+            generate_deposit().await?
+        }
+    };
+    */
 
     tracing::info!("sending tx to relayer");
     send_tx(deposit)
@@ -75,7 +82,7 @@ async fn send_tx(deposit: Deposit) -> Result<(), reqwest::Error> {
 
     let body = serde_json::to_string(&deposit).unwrap();
 
-    println!("{}", body);
+    tracing::trace!("tx body:\n{}", body);
 
     // let body = "{\"foo\":\"bar\"}";
     let result = client
@@ -88,26 +95,28 @@ async fn send_tx(deposit: Deposit) -> Result<(), reqwest::Error> {
 
     match result.status() {
         StatusCode::OK => {
-            tracing::info!("tx processed")
+            tracing::info!("tx sent")
         }
         _ => {
             let response = result.text().await.unwrap();
             tracing::error!("something wrong happened {}", response);
         }
     }
-
-    // println!("body = {:?}", body);
-
     Ok(())
 }
 
-fn pack_signature(signature: SignedData) -> Result<String, TestError> {
+fn pack_signature(signature: &SignedData) -> Result<String, TestError> {
     let mut packed = String::from("0x");
     packed.push_str(&hex::encode(signature.r.as_bytes()));
-    packed.push_str(&hex::encode(signature.s.as_bytes()));
+
+    let mut s_bytes: [u8; 32] = [0; 32];
+    s_bytes.copy_from_slice(signature.s.as_bytes());
     if signature.v % 2 == 0 {
-        packed.push_str("1");
+        let first_byte = s_bytes.first_mut().unwrap();
+        *first_byte ^= 0b1000_0000;
     }
+
+    packed.push_str(&hex::encode(s_bytes));
     tracing::trace!(
         "Signature:\nv:{},\n{:#?}\n{:#?},\n{:#?}",
         signature.v,
@@ -132,14 +141,7 @@ fn sign(buf: [u8; 32]) -> SignedData {
     let signed = Accounts::sign(&accounts, buf, key_ref);
     signed
 }
-// fn sign_nullifier(nullifier: Num<Fr>) -> Result<String, TestError> {
 
-//     let buf = serialize(nullifier)?;
-
-//     let signed = sign(buf);
-
-//     pack_signature(signed)
-// }
 
 fn serialize(num: Num<Fr>) -> Result<[u8; 32], TestError> {
     use borsh::BorshSerialize;
@@ -158,7 +160,6 @@ async fn generate_deposit() -> Result<Deposit, TestError> {
     use libzeropool::fawkes_crypto::backend::bellman_groth16::{verifier::verify, Parameters};
     use libzeropool::POOL_PARAMS;
     use libzeropool_rs::proof::prove_tx;
-    use rand::Rng;
 
     let state = State::init_test(POOL_PARAMS.clone());
     let acc = UserAccount::new(
@@ -204,7 +205,7 @@ async fn generate_deposit() -> Result<Deposit, TestError> {
 
     let deposit_signature = sign(nullifier_bytes);
 
-    let packed_sig = pack_signature(deposit_signature)?;
+    let packed_sig = pack_signature(&deposit_signature)?;
 
     let deposit = Deposit {
         proof: Proof { inputs, proof },
@@ -221,12 +222,7 @@ async fn generate_deposit() -> Result<Deposit, TestError> {
         }
         let serialized_deposit = serde_json::to_string(&deposit).unwrap();
         let path = format!("{}/{}.json", tx_folder, &hex::encode(nullifier_bytes));
-        println!("path to file : {}", path);
-        fs::write(
-            path,
-            serialized_deposit,
-        )
-        .unwrap();
+        fs::write(path, serialized_deposit).unwrap();
     }
 
     Ok(deposit)
@@ -245,10 +241,11 @@ fn nullifier_sign_test() {
 
     let deposit_signature = sign(nullifier_bytes);
 
-    let packed_sig = pack_signature(deposit_signature).unwrap();
+    let packed_sig = pack_signature(&deposit_signature).unwrap();
 
     assert_eq!(packed_sig.as_str(), "0xf70f2aa887c1f146e14a2fe5581805c6f93f99396e4f738740cf45a7af21d54c62ff74ee8b0712c0fe9bd0f94e71b9e2ccde83e7f1dff6c6f91c12a556eb014d");
 }
+
 
 #[test]
 fn verifiy_sig() {
@@ -274,7 +271,7 @@ fn verifiy_sig() {
 
     println!("r:{:#?}\n,s:{:#?},\nv:{:#?}", r, s, v);
 
-    let packed_sig = pack_signature(signed_data).unwrap();
+    let packed_sig = pack_signature(&signed_data).unwrap();
     println!("packed : {:#?}", packed_sig);
     let result = accounts.recover(web3::types::Recovery {
         message: web3::types::RecoveryMessage::Data(msg.to_vec()),
