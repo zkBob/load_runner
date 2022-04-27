@@ -28,3 +28,4 @@ opentelemetry = { version="0.17.0", features = ["rt-tokio", "metrics"] }
 opentelemetry-jaeger = { version="0.16.0", features = ["rt-tokio"] }
 thrift = "0.13"
 hex = "0.4.3"
+clap = { version = "3.1.12", features = ["derive"] }

@@ -1,5 +1,6 @@
 
-var abi = require('./token-abi.json')
+var tokenAbi = require('./token-abi.json')
+var poolAbi = require('./pool-abi.json')
 var Web3 = require('web3')
 var utils = require('web3-utils')
 
@@ -37,11 +38,15 @@ Private Keys
 (8) 0x829e924fdf021ba3dbbc4225edfece9aca04b929d6e75613329ca6f1d31c0bb4
 (9) 0xb0057716d5917badaf911b193b12b910811c1497b5bada8d7711f758981c3773
 */
-const rpcUrl = "http://localhost:8545"
+const rpcUrl = "http://127.0.0.1:8545"
 const web3 = new Web3(rpcUrl)
 const denominator = utils.toBN(1000000000)
-var tokenContractAddress = '0xD833215cBcc3f914bD1C9ece3EE7BF8B14f841bb'
-const token = new web3.eth.Contract(abi, tokenContractAddress)
+const tokenContractAddress = '0xD833215cBcc3f914bD1C9ece3EE7BF8B14f841bb';
+const poolContractAddress = '0xc89ce4735882c9f0f0fe26686c53074e09b0d550';
+
+const token = new web3.eth.Contract(tokenAbi, tokenContractAddress)
+const pool = new web3.eth.Contract(poolAbi, tokenContractAddress)
+
 const clientAddress = '0xFFcf8FDEE72ac11b5c542428B35EEF5769C409f0'
 const clientPrivateKey = '6cbed15c793ce57650b9877cf6fa156fbef513c4e6134f022a85b1ffdd59b2a1'
 
@@ -50,9 +55,6 @@ const relayerPrivateKey = '0x646f1ce2fdad0e6deeeb5c7e8e5543bdde65e86029e2fd9fc16
 
 const minterAddress = '0x90F8bf6A479f320ead074411a4B0e7944Ea8c9C1'
 const minterPrivateKey = '0x4f3edf983ac636a65a842ce7c78d9aa706d3b113bce9c46f30d7d21715b23b1d';
-
-
-const poolContractAddress = '0xc89ce4735882c9f0f0fe26686c53074e09b0d550';
 
 web3.eth.accounts.wallet.add(minterPrivateKey);
 web3.eth.accounts.wallet.add(clientPrivateKey);
@@ -136,18 +138,38 @@ const sign = (data) => {
 
 async function main() {
 
+
     try {
         console.log(await mint());
         await getTokenBalance();
         await checkAllowance();
         await approve();
         await checkAllowance();
+        await getEvents(pool, 'Message', { fromBlock: 0 }).then(res => console.log(res))
     } catch (error) {
         console.error(error)
     }
 
 }
 
-main().then(() => console.log("completed"))
+
+async function getEvents(contract, event, options) {
+    try {
+        const contractAddress = poolContractAddress
+        console.info(
+            '%o, Getting past events',
+            { contractAddress, event, fromBlock: options.fromBlock, toBlock: options.toBlock }
+        )
+        let events = await contract.getPastEvents(event, options)
+        // console.debug("events:", events);
+        console.debug('%o, Past events obtained', { contractAddress, events, count: pastEvents.length })
+        return pastEvents
+    } catch (e) {
+        console.error(`${event} events cannot be obtained: ${e.message}`)
+    }
+}
+
+main()
+    .then(() => console.log("completed"))
     .catch(err => { console.error(err); })
 
