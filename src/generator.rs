@@ -18,7 +18,7 @@ use rand::Rng;
 
 use secp256k1::SecretKey;
 
-use std::env;
+use std::{env, thread};
 use std::{fs, str::FromStr};
 use web3::{api::Accounts, types::SignedData};
 
@@ -162,6 +162,7 @@ pub async fn generate_deposit(&self) -> Result<(), TestError> {
                 }
                 let serialized_deposit = serde_json::to_string(&deposit).unwrap();//TODO: error conversion impl
                 let path = format!("{}/{}.json", tx_folder, &hex::encode(nullifier_bytes));
+                tracing::info!("{} saved {}", thread::current().name().unwrap(), path);
                 fs::write(path, serialized_deposit).map_err(|e| TestError::SavingError(e))
             }
             Err(_) => Err(TestError::ConfigError(String::from("TX_FOLDER not set"))),

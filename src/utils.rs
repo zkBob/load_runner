@@ -4,5 +4,7 @@ pub enum TestError {
     GeneratorError(String),
     SavingError(std::io::Error),
     SerializationError(serde_json::Error),
-    ConfigError(String)
+    ConfigError(String),
+    BadResponse(String),
+    MpscError
 }
