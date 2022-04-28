@@ -1,10 +1,37 @@
-use std::time::Duration;
+use std::{
+    thread,
+    time::{SystemTime, UNIX_EPOCH},
+};
 
 use reqwest::StatusCode;
 
-use crate::generator::Deposit;
+use crate::{generator::Deposit, utils::TestError};
 
+use tokio::time::{sleep, Duration};
 
+pub async fn emulate_send(_: Deposit) -> Result<(), TestError> {
+    let now = SystemTime::now();
+
+    let handle = thread::current();
+
+    println!(
+        "{:?} start {:?}",
+        handle.name().unwrap(),
+        now.duration_since(UNIX_EPOCH).unwrap(),
+        
+    );
+
+    sleep(Duration::from_millis(500)).await;
+
+    println!(
+        "{:?} complete {:?} {:?}",
+        handle.name().unwrap(),
+        now.duration_since(UNIX_EPOCH).unwrap(),
+        now.elapsed().unwrap()
+    );
+
+    Ok(())
+}
 
 pub async fn send_tx(deposit: Deposit) -> Result<(), reqwest::Error> {
     let client = reqwest::Client::new();

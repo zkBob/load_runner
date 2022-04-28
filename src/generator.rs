@@ -34,10 +34,13 @@ struct Proof {
 #[serde(rename_all = "camelCase")]
 pub struct Deposit {
     proof: Proof,
-    memo: String,
+    pub memo: String,
     tx_type: String,
     deposit_signature: String,
 }
+
+
+#[derive(Clone, Copy)]
 pub struct Generator {
     sk: SecretKey,
 }
@@ -97,7 +100,7 @@ impl Generator {
         signed
     }
 
-    pub async fn generate_deposit(&self) -> Result<(), TestError> {
+pub async fn generate_deposit(&self) -> Result<(), TestError> {
         let state = State::init_test(POOL_PARAMS.clone());
         let acc = UserAccount::new(
             Num::from(rand::thread_rng().gen::<u64>()),

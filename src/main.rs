@@ -1,7 +1,16 @@
-use load_runner::{generator::Generator, sender::send_tx, telemetry::*, utils::TestError};
-use opentelemetry::sdk::export::metrics::Count;
+use load_runner::{
+    generator::{Deposit, Generator},
+    sender::send_tx,
+    telemetry::*,
+    utils::TestError,
+};
 
-use std::env;
+use std::{
+    env, fs,
+    sync::atomic::{AtomicUsize, Ordering},
+    thread,
+    time::Duration,
+};
 
 use clap::Parser;
 
@@ -12,14 +21,14 @@ struct Args {
     tx_type: String,
     #[clap(short, long, default_value = "1")]
     count: u16,
-    #[clap( long, default_value = "1")]
+    #[clap(long, default_value = "1")]
     threads: u8,
     #[clap(short, long)]
     send: bool,
 }
 
-#[tokio::main]
-async fn main() -> Result<(), TestError> {
+// #[tokio::main]
+fn main() -> Result<(), TestError> {
     init_subscriber(get_subscriber(
         "load_runner".into(),
         "trace".into(),
@@ -32,12 +41,33 @@ async fn main() -> Result<(), TestError> {
     let sk = env::var("SK").unwrap();
     let generator = Generator::new(sk.as_str());
 
-    if !args.send { //generate lots of tx and save them
+    let threads: usize = args.threads.into();
+
+    let rt = tokio::runtime::Builder::new_multi_thread()
+        .thread_name_fn(|| {
+            static ATOMIC_ID: AtomicUsize = AtomicUsize::new(0);
+            let id = ATOMIC_ID.fetch_add(1, Ordering::SeqCst);
+            format!("senders-{}", id)
+        })
+        .worker_threads(threads)
+        .enable_all()
+        .on_thread_start(|| {
+            println!("{:?} init", thread::current().name().unwrap());
+        })
+        .on_thread_stop(|| {
+            println!("{:?} kill", thread::current().name().unwrap());
+        })
+        .build()
+        .unwrap();
+
+    if !args.send {
+        //generate lots of tx and save them
         match args.tx_type.as_str() {
             "deposit" => {
-
-                for i in 1 .. args.count {
-                    generator.generate_deposit().await?;
+                for i in 1..args.count {
+                    rt.spawn(async move {
+                        generator.generate_deposit().await.unwrap();
+                    });
                     tracing::info!("processed {} tx", i);
                 }
 
@@ -48,6 +78,29 @@ async fn main() -> Result<(), TestError> {
             ))),
         }
     } else {
+        let txs = fs::read_dir("./txs").unwrap();
+
+        for (index, entry) in txs.enumerate() {
+            if index >= args.count.into() {
+                break;
+            }
+
+            if index % threads == 0 {
+                // println!("step {}, threads spawned, scheduled next execution\n", index / threads);
+                thread::sleep(Duration::from_millis(1000));
+            }
+
+            let tx = entry.unwrap();
+            let content = fs::read(tx.path().as_os_str()).unwrap();
+            let d: Deposit = serde_json::from_slice::<Deposit>(&content).unwrap();
+
+            rt.spawn(async {
+                // sender::emulate_send(d).await.unwrap();
+
+                send_tx(d).await.map_err(|v| TestError::NetworkError(v))
+            });
+        }
+        thread::sleep(Duration::from_millis(1000));
         //sends prebaked transactions
         // let deposit: Deposit = match env::var("DEPOSIT_TX") {
         //     Ok(path) => {
@@ -67,8 +120,8 @@ async fn main() -> Result<(), TestError> {
         // };
 
         // send_tx(deposit)
-                //     .await
-                //     .map_err(|v| TestError::NetworkError(v))
+        //     .await
+        //     .map_err(|v| TestError::NetworkError(v))
         Ok(())
     }
 }

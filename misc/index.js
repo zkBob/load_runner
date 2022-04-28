@@ -136,23 +136,6 @@ const sign = (data) => {
     console.log("packed sig", packedSig)
 }
 
-async function main() {
-
-
-    try {
-        console.log(await mint());
-        await getTokenBalance();
-        await checkAllowance();
-        await approve();
-        await checkAllowance();
-        await getEvents(pool, 'Message', { fromBlock: 0 }).then(res => console.log(res))
-    } catch (error) {
-        console.error(error)
-    }
-
-}
-
-
 async function getEvents(contract, event, options) {
     try {
         const contractAddress = poolContractAddress
@@ -168,6 +151,23 @@ async function getEvents(contract, event, options) {
         console.error(`${event} events cannot be obtained: ${e.message}`)
     }
 }
+
+async function main() {
+
+
+    try {
+        console.log(await mint());
+        await getTokenBalance();
+        await checkAllowance();
+        await approve();
+        await checkAllowance();
+        // await getEvents(pool, 'Message', { fromBlock: 0 }).then(res => console.log(res))
+    } catch (error) {
+        console.error(error)
+    }
+
+}
+
 
 main()
     .then(() => console.log("completed"))
