@@ -13,11 +13,20 @@ use tokio::{
     time::{sleep, Duration},
 };
 
-#[derive(Debug,Serialize)]
+#[derive(Debug,Serialize,Deserialize)]
 pub struct JobResult{
-    job_id: u32,
+    pub job_id: u32,
     file_name: String,
     created: SystemTime
+}
+
+#[derive(Debug,Deserialize)]
+pub struct JobStatus {
+ state: String,
+ #[serde(rename(deserialize="txHash"))]
+ tx_hash: String,
+ created: u64,
+pub elapsed: u32
 }
 
 #[derive(Debug,Deserialize)]

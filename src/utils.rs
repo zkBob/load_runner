@@ -2,9 +2,40 @@
 pub enum TestError {
     NetworkError(reqwest::Error),
     GeneratorError(String),
-    SavingError(std::io::Error),
+    FileAccessError(std::io::Error),
     SerializationError(serde_json::Error),
     ConfigError(String),
     BadResponse(String),
-    MpscError
+    MpscError,
+}
+
+impl From<reqwest::Error> for TestError {
+    fn from(e: reqwest::Error) -> Self {
+        Self::NetworkError(e)
+    }
+}
+impl From<std::io::Error> for TestError {
+    fn from(e: std::io::Error) -> Self {
+        Self::FileAccessError(e)
+    }
+}
+
+impl std::fmt::Display for TestError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Adding a subscriber has failed")
+    }
+}
+
+impl std::error::Error for TestError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            TestError::NetworkError(e) => Some(e),
+            TestError::GeneratorError(e) => None,
+            TestError::FileAccessError(e) => Some(e),
+            TestError::SerializationError(e) => Some(e),
+            TestError::ConfigError(e) => None,
+            TestError::BadResponse(e) => None,
+            TestError::MpscError => None,
+        }
+    }
 }

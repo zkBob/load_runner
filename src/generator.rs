@@ -163,7 +163,10 @@ pub async fn generate_deposit(&self) -> Result<(), TestError> {
                 let serialized_deposit = serde_json::to_string(&deposit).unwrap();//TODO: error conversion impl
                 let path = format!("{}/{}.json", tx_folder, &hex::encode(nullifier_bytes));
                 tracing::info!("{} saved {}", thread::current().name().unwrap(), path);
-                fs::write(path, serialized_deposit).map_err(|e| TestError::SavingError(e))
+                let a = fs::write(path, serialized_deposit);
+                let b = a.map_err(|e| TestError::from(e));
+                // Ok(())
+                b
             }
             Err(_) => Err(TestError::ConfigError(String::from("TX_FOLDER not set"))),
         }
