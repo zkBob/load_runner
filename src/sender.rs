@@ -22,10 +22,12 @@ pub struct JobResult{
 
 #[derive(Debug,Deserialize)]
 pub struct JobStatus {
- state: String,
+#[serde(rename(deserialize="state"))]   
+ _state: String,
  #[serde(rename(deserialize="txHash"))]
- tx_hash: String,
- created: u64,
+ _tx_hash: String,
+ #[serde(rename(deserialize="created"))]
+ _created: u64,
 pub elapsed: u32
 }
 
@@ -61,6 +63,7 @@ pub async fn send_tx(
     file_name: String,
     deposit: Deposit,
     mpsc_sender: Sender<JobResult>,
+    relayer_url: String
 ) -> () {
     let client = reqwest::Client::new();
 
@@ -69,7 +72,7 @@ pub async fn send_tx(
     tracing::trace!("tx body:\n{}", body);
 
     let result = client
-        .post("http://localhost:8000/transaction")
+        .post(format!("{}/transaction",relayer_url))
         .body(body)
         .header("Content-type", "application/json")
         .timeout(Duration::from_secs(5))

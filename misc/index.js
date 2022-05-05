@@ -63,7 +63,7 @@ const mint = async () => {
 
     const txHash = await token
         .methods
-        .mint(clientAddress, denominator.mul(utils.toBN(100000000000)).toString())
+        .mint(clientAddress, denominator.mul(utils.toBN(900000000000000)).toString())
         .send({ from: minterAddress, gasLimit: 100000 })
 
     return txHash.events.Transfer.raw
@@ -78,7 +78,7 @@ const getTokenBalance = async () => {
 }
 
 const approve = async () => {
-    const approveResult = await token.methods.approve(poolContractAddress, utils.toBN(100000000000)).send({ from: clientAddress, gasLimit: 100000 });
+    const approveResult = await token.methods.approve(poolContractAddress, utils.toBN(900000000000000)).send({ from: clientAddress, gasLimit: 100000 });
 
     console.log('approveResult', approveResult)
 }

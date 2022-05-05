@@ -100,7 +100,7 @@ impl Generator {
         signed
     }
 
-pub async fn generate_deposit(&self) -> Result<(), TestError> {
+pub async fn generate_deposit(self) -> Result<(), TestError> {
         let state = State::init_test(POOL_PARAMS.clone());
         let acc = UserAccount::new(
             Num::from(rand::thread_rng().gen::<u64>()),

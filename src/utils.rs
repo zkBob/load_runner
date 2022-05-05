@@ -30,11 +30,11 @@ impl std::error::Error for TestError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
             TestError::NetworkError(e) => Some(e),
-            TestError::GeneratorError(e) => None,
+            TestError::GeneratorError(_) => None,
             TestError::FileAccessError(e) => Some(e),
             TestError::SerializationError(e) => Some(e),
-            TestError::ConfigError(e) => None,
-            TestError::BadResponse(e) => None,
+            TestError::ConfigError(_) => None,
+            TestError::BadResponse(_) => None,
             TestError::MpscError => None,
         }
     }
