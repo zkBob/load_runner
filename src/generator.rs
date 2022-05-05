@@ -100,7 +100,7 @@ impl Generator {
         signed
     }
 
-pub async fn generate_deposit(self) -> Result<(), TestError> {
+pub async fn generate_deposit(self) -> Result<(String,String), TestError> {
         let state = State::init_test(POOL_PARAMS.clone());
         let acc = UserAccount::new(
             Num::from(rand::thread_rng().gen::<u64>()),
@@ -160,13 +160,12 @@ pub async fn generate_deposit(self) -> Result<(), TestError> {
                 if tx_folder.ends_with("/") {
                     tx_folder.pop();
                 }
-                let serialized_deposit = serde_json::to_string(&deposit).unwrap();//TODO: error conversion impl
-                let path = format!("{}/{}.json", tx_folder, &hex::encode(nullifier_bytes));
-                tracing::info!("{} saved {}", thread::current().name().unwrap(), path);
-                let a = fs::write(path, serialized_deposit);
-                let b = a.map_err(|e| TestError::from(e));
-                // Ok(())
-                b
+                    let file_name = hex::encode(nullifier_bytes);
+                    let thread_name = thread::current().name().unwrap().to_owned();
+                    let serialized_deposit = serde_json::to_string(&deposit).unwrap();//TODO: error conversion impl
+                    let path = format!("{}/{}.json", tx_folder, file_name);
+                    fs::write(path, serialized_deposit)?;
+                    Ok((file_name,thread_name))
             }
             Err(_) => Err(TestError::ConfigError(String::from("TX_FOLDER not set"))),
         }

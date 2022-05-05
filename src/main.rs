@@ -1,3 +1,4 @@
+use futures_util::stream::FuturesUnordered;
 use load_runner::{
     generator::{Deposit, Generator},
     sender::{send_tx, JobResult, JobStatus},
@@ -11,13 +12,14 @@ use std::{
     io::Write,
     sync::atomic::{AtomicUsize, Ordering},
     thread,
-    time::{Duration},
+    time::Duration,
 };
 
 use clap::Parser;
 use lazy_static::lazy_static;
 use prometheus::{labels, register_counter, register_histogram, Counter, Histogram};
 
+use futures::prelude::*;
 #[derive(Parser, Debug)]
 #[clap(author, version, about, long_about = None)]
 struct Args {
@@ -32,7 +34,7 @@ struct Args {
 }
 
 const DEFAULT_SK: &str = "6cbed15c793ce57650b9877cf6fa156fbef513c4e6134f022a85b1ffdd59b2a1";
-const DEFAULT_RELAYER_URL:&str = "http://localhost:8000";
+const DEFAULT_RELAYER_URL: &str = "http://localhost:8000";
 
 // #[tokio::main]
 
@@ -70,7 +72,6 @@ lazy_static! {
 }
 
 fn send(threads: usize, rt: Runtime, limit: usize) -> Result<(), TestError> {
-
     let txs_folder = env::var("TXS_FOLDER").unwrap_or("./txs".to_owned());
     let txs = fs::read_dir(txs_folder).unwrap();
 
@@ -92,7 +93,7 @@ fn send(threads: usize, rt: Runtime, limit: usize) -> Result<(), TestError> {
         let mpsc_sender = channel_sender.clone();
         let relayer_url = env::var("RELAYER_URL").unwrap_or(DEFAULT_RELAYER_URL.to_owned());
         rt.spawn(async {
-            send_tx(file_name, d, mpsc_sender,relayer_url).await;
+            send_tx(file_name, d, mpsc_sender, relayer_url).await;
         });
     }
 
@@ -129,14 +130,14 @@ async fn view_results() -> Result<(), TestError> {
         let job_result: JobResult = serde_json::from_slice(line.unwrap().as_bytes()).unwrap();
 
         let job_status: JobStatus =
-            reqwest::get(format!("{}/job/{}", relayer_url,  job_result.job_id))
+            reqwest::get(format!("{}/job/{}", relayer_url, job_result.job_id))
                 .await
                 .unwrap()
                 .json()
                 .await
                 .unwrap();
 
-        let elapsed_sec = f64::from(job_status.elapsed) /1000.0;
+        let elapsed_sec = f64::from(job_status.elapsed) / 1000.0;
         tracing::info!("job {}, elapsed {}", job_result.job_id, elapsed_sec);
 
         batch.push(elapsed_sec);
@@ -203,13 +204,34 @@ fn main() -> Result<(), TestError> {
     match args.mode.as_str() {
         "generate" => match args.tx_type.as_str() {
             "deposit" => {
-                for _ in 0..args.count {
-                    rt.block_on(async move {
-                        let sk = env::var("SK").unwrap_or(DEFAULT_SK.to_owned());
-                        let generator = Generator::new(sk.as_str());
-                        generator.generate_deposit().await
-                    })?;
-                }
+                rt.block_on(async {
+                    let mut completion_stream = (0..args.count.into())
+                        .map(|_| async {
+                            let thread_name: String = thread::current().name().unwrap().to_owned();
+
+                            tracing::info!("{} started", thread_name);
+
+                            let sk = env::var("SK").unwrap_or(DEFAULT_SK.to_owned());
+
+                            let generator = Generator::new(sk.as_str());
+
+                            generator.generate_deposit().await.unwrap()
+                        })
+                        .map(|f| rt.spawn(f))
+                        .collect::<FuturesUnordered<_>>();
+
+                    while let Some(Ok((file_name, thread_name))) = completion_stream.next().await {
+                        tracing::info!("{} saved {}", thread_name, file_name);
+                        
+                    }
+
+                    // for _ in 0..args.count {
+                    //     let sk = env::var("SK").unwrap_or(DEFAULT_SK.to_owned());
+                    //     let generator = Generator::new(sk.as_str());
+                    //     rt.spawn(async move { generator.generate_deposit().await.unwrap() });
+
+                    // }
+                });
                 Ok(())
             }
             _ => Err(load_runner::utils::TestError::GeneratorError(String::from(
@@ -232,14 +254,13 @@ fn main() -> Result<(), TestError> {
 #[test]
 fn publish_test() {
     for _ in 1..10 {
-
         use rand::Rng;
 
         let ints: [u8; 32] = rand::thread_rng().gen();
 
         let values = ints.map(|e| f64::try_from(e % 10).unwrap());
 
-        println!("{:?}" ,values);
+        println!("{:?}", values);
 
         let mut v: Vec<f64> = vec![0.0; 32];
 
