@@ -31,6 +31,8 @@ struct Args {
     threads: u8,
     #[clap(short, long)]
     mode: String,
+    #[clap(long, default_value = "0")]
+    skip: u8,
 }
 
 const DEFAULT_SK: &str = "6cbed15c793ce57650b9877cf6fa156fbef513c4e6134f022a85b1ffdd59b2a1";
@@ -71,13 +73,16 @@ lazy_static! {
     .unwrap();
 }
 
-fn send(threads: usize, rt: Runtime, limit: usize) -> Result<(), TestError> {
+fn send(threads: usize, rt: Runtime, limit: usize, skip: usize) -> Result<(), TestError> {
     let txs_folder = env::var("TXS_FOLDER").unwrap_or("./txs".to_owned());
     let txs = fs::read_dir(txs_folder).unwrap();
 
     let (channel_sender, mut rx) = mpsc::channel::<JobResult>(1000);
     // let count = args.count.into();
     for (index, entry) in txs.enumerate() {
+        if index < usize::from(skip) {
+            continue;
+        }
         if index > limit {
             break;
         }
@@ -238,7 +243,7 @@ fn main() -> Result<(), TestError> {
                 "unknown transaction type",
             ))),
         },
-        "send" => send(threads, rt, args.count.into()),
+        "send" => send(threads, rt, args.count.into(), args.skip.into()),
 
         "publish" => {
             rt.block_on(async { view_results().await }).unwrap();
