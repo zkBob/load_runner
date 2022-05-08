@@ -83,7 +83,7 @@ fn send(threads: usize, rt: Runtime, limit: usize, skip: usize) -> Result<(), Te
         if index < usize::from(skip) {
             continue;
         }
-        if index > limit {
+        if index > limit + skip {
             break;
         }
 
@@ -227,7 +227,6 @@ fn main() -> Result<(), TestError> {
 
                     while let Some(Ok((file_name, thread_name))) = completion_stream.next().await {
                         tracing::info!("{} saved {}", thread_name, file_name);
-                        
                     }
 
                     // for _ in 0..args.count {
