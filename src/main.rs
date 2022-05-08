@@ -80,10 +80,10 @@ fn send(threads: usize, rt: Runtime, limit: usize, skip: usize) -> Result<(), Te
     let (channel_sender, mut rx) = mpsc::channel::<JobResult>(1000);
     // let count = args.count.into();
     for (index, entry) in txs.enumerate() {
-        if index < usize::from(skip) {
+        if index <= usize::from(skip) {
             continue;
         }
-        if index > limit + skip {
+        if index == limit + skip {
             break;
         }
 
