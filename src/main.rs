@@ -75,7 +75,7 @@ fn send(threads: usize, rt: Runtime, limit: usize) -> Result<(), TestError> {
     let txs_folder = env::var("TXS_FOLDER").unwrap_or("./txs".to_owned());
     let txs = fs::read_dir(txs_folder).unwrap();
 
-    let (channel_sender, mut rx) = mpsc::channel::<JobResult>(1);
+    let (channel_sender, mut rx) = mpsc::channel::<JobResult>(1000);
     // let count = args.count.into();
     for (index, entry) in txs.enumerate() {
         if index > limit {
