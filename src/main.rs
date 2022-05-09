@@ -66,21 +66,21 @@ lazy_static! {
     )
     .unwrap();
     static ref PUSH_REQ_HISTOGRAM: Histogram = register_histogram!(
-        "task_processing_duration",
+        "tx_latency",
         "The push request latencies in seconds.",
         vec![3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0]
     )
     .unwrap();
 }
 
-fn send(threads: usize, rt: Runtime, limit: usize, skip: usize) -> Result<(), TestError> {
+fn send(threads: usize, rt: &Runtime, limit: usize, skip: usize) -> Result<(), TestError> {
     let txs_folder = env::var("TXS_FOLDER").unwrap_or("./txs".to_owned());
     let txs = fs::read_dir(txs_folder).unwrap();
 
     let (channel_sender, mut rx) = mpsc::channel::<JobResult>(1000);
     // let count = args.count.into();
     for (index, entry) in txs.enumerate() {
-        if index <= usize::from(skip) {
+        if index < skip {
             continue;
         }
         if index == limit + skip {
@@ -121,17 +121,15 @@ fn send(threads: usize, rt: Runtime, limit: usize, skip: usize) -> Result<(), Te
     Ok(())
 }
 
-async fn view_results() -> Result<(), TestError> {
+async fn view_results() -> Result<Vec<f64>, TestError> {
     use std::fs::File;
     use std::io::{prelude::*, BufReader};
-
-    let batch_size = 1;
 
     let file = File::open("result.log")?;
     let reader = BufReader::new(file);
     let relayer_url = env::var("RELAYER_URL").unwrap_or(DEFAULT_RELAYER_URL.to_owned());
-    let mut batch: Vec<f64> = vec![];
-    for (index, line) in reader.lines().enumerate() {
+    let mut results: Vec<f64> = vec![];
+    for (_index, line) in reader.lines().enumerate() {
         let job_result: JobResult = serde_json::from_slice(line.unwrap().as_bytes()).unwrap();
 
         let job_status: JobStatus =
@@ -145,52 +143,51 @@ async fn view_results() -> Result<(), TestError> {
         let elapsed_sec = f64::from(job_status.elapsed) / 1000.0;
         tracing::info!("job {}, elapsed {}", job_result.job_id, elapsed_sec);
 
-        batch.push(elapsed_sec);
+        results.push(elapsed_sec);
 
-        if index > 0 && index % batch_size == 0 {
-            publish(&batch);
-            batch.clear();
-        }
+        // if index > 0 && index % results_size == 0 {
+        //     publish(&results);
+        //     results.clear();
+        // }
     }
 
-    if !batch.is_empty() {
-        tracing::info!("publishing batch {}", batch.len());
-        publish(&batch);
-    }
+    // if !results.is_empty() {
+    //     tracing::info!("publishing results {}", results.len());
+    //     publish(&results);
+    // }
 
-    Ok(())
+    Ok(results)
 }
 
-fn publish(values: &Vec<f64>) {
-    let address = "127.0.0.1:9091".to_owned();
 
-    for value in values {
-        let name = String::from("job");
-        PUSH_REQ_HISTOGRAM.observe(*value);
-        let metric_families = prometheus::gather();
-        prometheus::push_metrics(
-            name.as_str(),
-            labels! {"instance".to_owned() => "HAL-9000".to_owned(),},
-            &address,
-            metric_families,
-            Some(prometheus::BasicAuthentication {
-                username: "user".to_owned(),
-                password: "pass".to_owned(),
-            }),
-        )
-        .unwrap();
+fn send_to_gw(index: usize) {
+    let address = env::var("PROMETHEUS_PUSH_GW").unwrap_or("http://127.0.0.1:9091".to_owned());
+    let job_name = String::from("job"); //???
+    let metric_families = prometheus::gather();
+            prometheus::push_metrics(
+                job_name.as_str(),
+                labels! {"instance".to_owned() => "HAL-9000".to_owned(),},
+                &address,
+                metric_families,
+                Some(prometheus::BasicAuthentication {
+                    username: "user".to_owned(),
+                    password: "pass".to_owned(),
+                }),
+            )
+            .unwrap();
 
-        tracing::info!("published {} ", name);
-        thread::sleep(Duration::from_millis(500));
+            tracing::info!("published {} ", index);
+            thread::sleep(Duration::from_millis(100));
+}
+fn publish(target: &Histogram, values: &Vec<f64>, batch_size: usize) {
+
+    for (index, value) in values.into_iter().enumerate() {
+        target.observe(*value);
+        if index % batch_size == 0 {
+            send_to_gw(index);
+        }
     }
-
-    // for _ in 0..5 {
-    //     thread::sleep(time::Duration::from_secs(2));
-    //     PUSH_COUNTER.inc();
-    //     let metric_families = prometheus::gather();
-    //     let _timer = PUSH_REQ_HISTOGRAM.start_timer(); // drop as observe
-
-    // }
+    send_to_gw(values.len());
 }
 fn main() -> Result<(), TestError> {
     init_subscriber(get_subscriber(
@@ -242,12 +239,13 @@ fn main() -> Result<(), TestError> {
                 "unknown transaction type",
             ))),
         },
-        "send" => send(threads, rt, args.count.into(), args.skip.into()),
-
+        "send" => rt.block_on(async { send(threads, &rt, args.count.into(), args.skip.into()) }),
         "publish" => {
-            rt.block_on(async { view_results().await }).unwrap();
+            let batch_size = env::var("BATCH_SIZE").unwrap_or("1".to_string());
+            let results = rt.block_on(async { view_results().await }).unwrap();
 
-            // thread::sleep(Duration::from_millis(20000));
+            publish(&PUSH_REQ_HISTOGRAM,&results, batch_size.parse::<usize>().unwrap());
+            // thread::sleep(Duration::from_millis(10000));
             Ok(())
         }
 
@@ -257,19 +255,43 @@ fn main() -> Result<(), TestError> {
 
 #[test]
 fn publish_test() {
-    for _ in 1..10 {
+    init_subscriber(get_subscriber(
+        "load_runner".into(),
+        "trace".into(),
+        std::io::stdout,
+    ));
+
+    lazy_static!{
+        static ref TEST_HISTOGRAM: Histogram = register_histogram!(
+            "test",
+            "The push request latencies in seconds.",
+            vec![3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0]
+        )
+        .unwrap();
+    }
+    for _ in 1..3 {
         use rand::Rng;
 
         let ints: [u8; 32] = rand::thread_rng().gen();
 
+        let mut batch_size: usize = 0;
+
+        while batch_size % 10 == 0 {
+            batch_size = (rand::thread_rng().gen::<usize>()) % 10;
+        }
+
+        tracing::info!("batch_size {:?}", batch_size);
+
+        // let batch_size: usize = rand::thread_rng().gen();
+
         let values = ints.map(|e| f64::try_from(e % 10).unwrap());
 
-        println!("{:?}", values);
+        tracing::info!("{:?}", values);
 
         let mut v: Vec<f64> = vec![0.0; 32];
 
         v.copy_from_slice(&values[..]);
 
-        publish(&v);
+        publish(&TEST_HISTOGRAM,&v, batch_size % 10);
     }
 }
