@@ -68,7 +68,7 @@ lazy_static! {
     static ref PUSH_REQ_HISTOGRAM: Histogram = register_histogram!(
         "tx_latency",
         "The push request latencies in seconds.",
-        vec![3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0]
+        vec![1.0, 2.0, 4.0, 8.0, 16.0, 32.0]
     )
     .unwrap();
 }
