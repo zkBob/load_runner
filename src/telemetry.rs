@@ -24,5 +24,5 @@ pub fn get_subscriber(
 }
 
 pub fn init_subscriber(subscriber: impl Subscriber + Send + Sync) {
-    set_global_default(subscriber).expect("failed to get subscriver");
+    set_global_default(subscriber).expect("failed to get subscriber");
 }

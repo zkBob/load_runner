@@ -1,15 +1,14 @@
 use futures_util::stream::FuturesUnordered;
 use load_runner::{
-    generator::{Deposit, Generator},
-    sender::{send_tx, JobResult, JobStatus},
+    generator::{Generator},
+    sender::{send,JobResult, JobStatus},
     telemetry::*,
     utils::TestError,
 };
-use tokio::{runtime::Runtime, sync::mpsc};
+use tokio::{runtime::Runtime};
 
 use std::{
-    env, fs,
-    io::Write,
+    env,
     sync::atomic::{AtomicUsize, Ordering},
     thread,
     time::Duration,
@@ -73,53 +72,7 @@ lazy_static! {
     .unwrap();
 }
 
-fn send(threads: usize, rt: &Runtime, limit: usize, skip: usize) -> Result<(), TestError> {
-    let txs_folder = env::var("TXS_FOLDER").unwrap_or("./txs".to_owned());
-    let txs = fs::read_dir(txs_folder).unwrap();
 
-    let (channel_sender, mut rx) = mpsc::channel::<JobResult>(1000);
-    // let count = args.count.into();
-    for (index, entry) in txs.enumerate() {
-        if index < skip {
-            continue;
-        }
-        if index == limit + skip {
-            break;
-        }
-
-        if index % threads == 0 {
-            thread::sleep(Duration::from_millis(1000));
-        }
-
-        let tx = entry.unwrap();
-        let content = fs::read(tx.path().as_os_str()).unwrap();
-        let d: Deposit = serde_json::from_slice::<Deposit>(&content).unwrap();
-        let file_name = tx.file_name().to_string_lossy().into_owned();
-        let mpsc_sender = channel_sender.clone();
-        let relayer_url = env::var("RELAYER_URL").unwrap_or(DEFAULT_RELAYER_URL.to_owned());
-        rt.spawn(async {
-            send_tx(file_name, d, mpsc_sender, relayer_url).await;
-        });
-    }
-
-    let _rx_handle = rt.spawn(async move {
-        let mut file = fs::OpenOptions::new()
-            .append(true)
-            .open("result.log")
-            .unwrap();
-        // Start receiving messages
-        while let Some(job_result) = rx.recv().await {
-            let content = serde_json::to_string(&job_result).unwrap();
-            tracing::info!("received job result {}", content);
-            if let Err(e) = writeln!(file, "{}", content) {
-                eprintln!("Couldn't write to file: {}", e);
-            }
-        }
-    });
-
-    thread::sleep(Duration::from_millis(10000));
-    Ok(())
-}
 
 async fn view_results() -> Result<Vec<f64>, TestError> {
     use std::fs::File;
@@ -226,12 +179,6 @@ fn main() -> Result<(), TestError> {
                         tracing::info!("{} saved {}", thread_name, file_name);
                     }
 
-                    // for _ in 0..args.count {
-                    //     let sk = env::var("SK").unwrap_or(DEFAULT_SK.to_owned());
-                    //     let generator = Generator::new(sk.as_str());
-                    //     rt.spawn(async move { generator.generate_deposit().await.unwrap() });
-
-                    // }
                 });
                 Ok(())
             }
