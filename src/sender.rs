@@ -55,6 +55,22 @@ pub fn send(tps: usize, rt: &Runtime, limit: usize, skip: usize) -> Result<(), T
     let step: f64 = 1.0 / (tps as f64);
     let mut total: f64 = 0.0;
     let mut skipped: usize = skip;
+
+    let _rx_handle = rt.spawn(async move {
+        let mut file = fs::OpenOptions::new()
+            .append(true)
+            .open("result.log")
+            .unwrap();
+        // Start receiving messages
+        while let Some(job_result) = rx.recv().await {
+            let content = serde_json::to_string(&job_result).unwrap();
+            tracing::info!("received job result {}", content);
+            if let Err(e) = writeln!(file, "{}", content) {
+                eprintln!("Couldn't write to file: {}", e);
+            }
+        }
+    });
+    
     loop {
         let elapsed = start.elapsed().unwrap();
 
@@ -85,22 +101,7 @@ pub fn send(tps: usize, rt: &Runtime, limit: usize, skip: usize) -> Result<(), T
             total += step;
         }
     }
-
-    let _rx_handle = rt.spawn(async move {
-        let mut file = fs::OpenOptions::new()
-            .append(true)
-            .open("result.log")
-            .unwrap();
-        // Start receiving messages
-        while let Some(job_result) = rx.recv().await {
-            let content = serde_json::to_string(&job_result).unwrap();
-            tracing::info!("received job result {}", content);
-            if let Err(e) = writeln!(file, "{}", content) {
-                eprintln!("Couldn't write to file: {}", e);
-            }
-        }
-    });
-
+    
     // thread::sleep(Duration::from_millis(10000));
     Ok(())
 }
