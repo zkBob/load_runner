@@ -39,14 +39,14 @@ const DEFAULT_RELAYER_URL: &str = "http://localhost:8000";
 
 // #[tokio::main]
 
-fn init_runtime(threads: usize) -> Runtime {
+fn init_runtime(_threads: usize) -> Runtime {
     tokio::runtime::Builder::new_multi_thread()
         .thread_name_fn(|| {
             static ATOMIC_ID: AtomicUsize = AtomicUsize::new(0);
             let id = ATOMIC_ID.fetch_add(1, Ordering::SeqCst);
             format!("senders-{}", id)
         })
-        .worker_threads(threads)
+        .worker_threads(4)
         .enable_all()
         .on_thread_start(|| {
             tracing::debug!("{:?} init", thread::current().name().unwrap());

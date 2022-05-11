@@ -135,7 +135,7 @@ pub async fn send_tx(
     match result.status() {
         StatusCode::OK => {
             let response = result.json::<RelayerReponse>().await.unwrap();
-            tracing::debug!("tx response {:#?}", response);
+            tracing::info!("tx response {:#?}", response);
             let job_id: u32 = response.job_id.parse::<u32>().unwrap();
             mpsc_sender
                 .send(JobResult {
