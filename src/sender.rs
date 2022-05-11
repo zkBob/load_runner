@@ -70,7 +70,7 @@ pub fn send(tps: usize, rt: &Runtime, limit: usize, skip: usize) -> Result<(), T
             }
         }
     });
-    
+
     loop {
         let elapsed = start.elapsed().unwrap();
 
@@ -102,7 +102,7 @@ pub fn send(tps: usize, rt: &Runtime, limit: usize, skip: usize) -> Result<(), T
         }
     }
     
-    // thread::sleep(Duration::from_millis(10000));
+    thread::sleep(Duration::from_millis(20000));
     Ok(())
 }
 
