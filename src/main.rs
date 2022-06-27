@@ -74,7 +74,7 @@ lazy_static! {
 }
 
 fn send(threads: usize, rt: &Runtime, limit: usize, skip: usize) -> Result<(), TestError> {
-    let txs_folder = env::var("TXS_FOLDER").unwrap_or("./txs".to_owned());
+    let txs_folder = env::var("TX_FOLDER").unwrap_or("./txs".to_owned());
     let txs = fs::read_dir(txs_folder).unwrap();
 
     let (channel_sender, mut rx) = mpsc::channel::<JobResult>(1000);
