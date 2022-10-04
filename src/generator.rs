@@ -1,19 +1,16 @@
-use libzeropool::{
-    fawkes_crypto::{
-        backend::bellman_groth16::{engines::Bn256, prover},
-        engines::bn256::Fr,
-        ff_uint::Num,
-    },
-    native::boundednum::BoundedNum,
-};
+use libzkbob_rs::libzeropool::fawkes_crypto::backend::bellman_groth16::Parameters;
+use libzkbob_rs::libzeropool::fawkes_crypto::backend::bellman_groth16::engines::Bn256;
+use libzkbob_rs::libzeropool::fawkes_crypto::backend::bellman_groth16::prover;
+use libzkbob_rs::libzeropool::fawkes_crypto::backend::bellman_groth16::verifier::{VK, self};
+use libzkbob_rs::libzeropool::fawkes_crypto::engines::bn256::Fr;
+use libzkbob_rs::libzeropool::fawkes_crypto::ff_uint::Num;
+use libzkbob_rs::libzeropool::native::boundednum::BoundedNum;
 use serde::{Deserialize, Serialize};
 
-use libzeropool::fawkes_crypto::backend::bellman_groth16::verifier::VK;
-use libzeropool::fawkes_crypto::backend::bellman_groth16::{verifier::verify, Parameters};
-use libzeropool::POOL_PARAMS;
-use libzeropool_rs::proof::prove_tx;
+use libzkbob_rs::libzeropool::POOL_PARAMS;
+use libzkbob_rs::{proof::prove_tx, libzeropool::fawkes_crypto::ff_uint::{NumRepr, Uint}};
 
-use libzeropool_rs::client::{state::State, TxType, UserAccount};
+use libzkbob_rs::client::{state::State, TxType, UserAccount};
 use rand::Rng;
 
 use secp256k1::SecretKey;
@@ -58,7 +55,7 @@ fn serialize(num: Num<Fr>) -> Result<[u8; 32], TestError> {
 }
 
 fn pack_signature(signature: &SignedData) -> Result<String, TestError> {
-    let mut packed = String::from("0x");
+    let mut packed = String::new(); //String::from("0x");
     packed.push_str(&hex::encode(signature.r.as_bytes()));
 
     let mut s_bytes: [u8; 32] = [0; 32];
@@ -111,11 +108,12 @@ pub async fn generate_deposit(self) -> Result<(String,String), TestError> {
         let tx_data = acc
             .create_tx(
                 TxType::Deposit(
-                    BoundedNum::new(Num::ZERO),
+                    BoundedNum::new(Num::from_uint_unchecked(NumRepr(Uint::from_u64(100000000)))),
                     vec![],
-                    BoundedNum::new(Num::ONE),
+                    BoundedNum::new(Num::from_uint_unchecked(NumRepr(Uint::from_u64(100000000)))),
                 ),
                 None,
+                None
             )
             .unwrap();
 
@@ -128,9 +126,9 @@ pub async fn generate_deposit(self) -> Result<(String,String), TestError> {
         let params_data = std::fs::read(params_path).unwrap();
         let mut params_data_cur = &params_data[..];
 
-        let params = Parameters::<Bn256>::read(&mut params_data_cur, false, false).unwrap();
+        let params = Parameters::read(&mut params_data_cur, false, false).unwrap();
 
-        let nullifier: Num<libzeropool::fawkes_crypto::engines::bn256::Fr> =
+        let nullifier: Num<Fr> =
             tx_data.public.nullifier;
         let (inputs, proof) = prove_tx(&params, &*POOL_PARAMS, tx_data.public, tx_data.secret);
 
@@ -138,7 +136,7 @@ pub async fn generate_deposit(self) -> Result<(String,String), TestError> {
 
         let vk: VK<Bn256> = serde_json::from_str(&vk_str).unwrap();
 
-        let verification_result = verify(&vk, &proof, &inputs);
+        let verification_result = verifier::verify(&vk, &proof, &inputs);
 
         assert!(verification_result);
 

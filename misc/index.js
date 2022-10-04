@@ -41,29 +41,24 @@ Private Keys
 const rpcUrl = "http://127.0.0.1:8545"
 const web3 = new Web3(rpcUrl)
 const denominator = utils.toBN(1000000000)
-const tokenContractAddress = '0xD833215cBcc3f914bD1C9ece3EE7BF8B14f841bb';
-const poolContractAddress = '0xc89ce4735882c9f0f0fe26686c53074e09b0d550';
+const tokenContractAddress = '0xe78A0F7E598Cc8b0Bb87894B0F60dD2a88d6a8Ab';
+const poolContractAddress = '0xe982E462b094850F12AF94d21D470e21bE9D0E9C';
 
 const token = new web3.eth.Contract(tokenAbi, tokenContractAddress)
-const pool = new web3.eth.Contract(poolAbi, tokenContractAddress)
 
 const clientAddress = '0xFFcf8FDEE72ac11b5c542428B35EEF5769C409f0'
 const clientPrivateKey = '6cbed15c793ce57650b9877cf6fa156fbef513c4e6134f022a85b1ffdd59b2a1'
-
-const relayerAddress = '0x22d491Bde2303f2f43325b2108D26f1eAbA1e32b'
-const relayerPrivateKey = '0x646f1ce2fdad0e6deeeb5c7e8e5543bdde65e86029e2fd9fc169899c440a7913'
 
 const minterAddress = '0x90F8bf6A479f320ead074411a4B0e7944Ea8c9C1'
 const minterPrivateKey = '0x4f3edf983ac636a65a842ce7c78d9aa706d3b113bce9c46f30d7d21715b23b1d';
 
 web3.eth.accounts.wallet.add(minterPrivateKey);
 web3.eth.accounts.wallet.add(clientPrivateKey);
-web3.eth.accounts.wallet.add(relayerPrivateKey);
 const mint = async () => {
 
     const txHash = await token
         .methods
-        .mint(clientAddress, denominator.mul(utils.toBN(900000000000000)).toString())
+        .mint(clientAddress, denominator.mul(utils.toBN("10000000000000000000000")).toString())
         .send({ from: minterAddress, gasLimit: 100000 })
 
     return txHash.events.Transfer.raw
@@ -78,7 +73,7 @@ const getTokenBalance = async () => {
 }
 
 const approve = async () => {
-    const approveResult = await token.methods.approve(poolContractAddress, utils.toBN(900000000000000)).send({ from: clientAddress, gasLimit: 100000 });
+    const approveResult = await token.methods.approve(poolContractAddress, utils.toBN("10000000000000000000000")).send({ from: clientAddress, gasLimit: 100000 });
 
     console.log('approveResult', approveResult)
 }
@@ -88,68 +83,6 @@ const checkAllowance = async () => {
         .call();
 
     console.log("allowance:", allowance)
-}
-const transfer = async () => {
-    await token
-        .methods
-        .approve(relayerAddress, denominator.mul(utils.toBN(10000000)).toString())
-        .send({ from: clientAddress, gasLimit: 100000 });
-}
-
-const transferFrom = async () => {
-    token
-        .methods
-        .transferFrom(relayerAddress, clientAddress, denominator.mul(utils.toBN(1)).toString())
-        .send({ from: clientAddress, gasLimit: 100000 })
-        .then(result => {
-            console.log("approve result", result);
-        }).catch(err => console.error("approve failed", err))
-}
-
-function numToHex(web3, n, pad = 64) {
-    let num = toBN(n)
-    if (num.isNeg()) {
-        let a = toBN(2).pow(toBN(pad * 4))
-        num = a.sub(num.neg())
-    }
-    const hex = web3.utils.numberToHex(num)
-    return web3.utils.padLeft(hex, pad)
-}
-
-
-const sign = (data) => {
-    const sig = web3.eth.accounts.sign(
-        data,
-        clientPrivateKey
-    )
-    console.log(sig)
-
-    const packSignature = (sign) => {
-        const vBit = toBN(sign.v).isEven()
-        const r = toBN(sign.r)
-        const s = toBN(sign.s)
-        if (vBit) s.iadd(toBN(2).pow(toBN(255)))
-        return '0x' + r.toString('hex') + s.toString('hex')
-    }
-
-    let packedSig = packSignature(sig)
-    console.log("packed sig", packedSig)
-}
-
-async function getEvents(contract, event, options) {
-    try {
-        const contractAddress = poolContractAddress
-        console.info(
-            '%o, Getting past events',
-            { contractAddress, event, fromBlock: options.fromBlock, toBlock: options.toBlock }
-        )
-        let events = await contract.getPastEvents(event, options)
-        // console.debug("events:", events);
-        console.debug('%o, Past events obtained', { contractAddress, events, count: pastEvents.length })
-        return pastEvents
-    } catch (e) {
-        console.error(`${event} events cannot be obtained: ${e.message}`)
-    }
 }
 
 async function main() {
