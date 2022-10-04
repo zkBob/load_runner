@@ -72,7 +72,7 @@ pub async fn send_tx(
     tracing::trace!("tx body:\n{}", body);
 
     let result = client
-        .post(format!("{}/transaction",relayer_url))
+        .post(format!("{}/sendTransaction",relayer_url))
         .body(body)
         .header("Content-type", "application/json")
         .timeout(Duration::from_secs(5))
